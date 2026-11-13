@@ -25,6 +25,7 @@ dot    = input.bool     (  false   ,                'Show Previous Max Volume Pr
 pocUp  = input.color    (#00e676   , 'Bullish POC' , inline='p', group='POC')
 pocDn  = input.color    (#ff1744   , 'Bearish POC' , inline='p', group='POC', tooltip='POC side = whether the highest-volume intrabar move was bullish (up) or bearish (down).\nNeutral/tie uses the text color below.')
 pocNt  = input.color    (#b2b5be   , 'Neutral POC' , group='POC')
+binTks = input.int      (   4      , 'POC bin size (ticks)', minval=1, group='POC', tooltip='LTF mode only. Price bucket width used to build the intrabar volume profile.\nNQ: 4 ticks = 1 point.\nPOC = bucket with the most volume. POC side = up vs down volume inside that bucket.')
 showTab= input.bool     (   true   ,   'Show TF'              , group=     'Table'    )
 tabCol = input.color  (#b2b5beaa , 'Text Color'             , group=     'Table'    )     
 sizeT  = input.string   (size.tiny , 'Size Table'             , group=     'Table'
@@ -106,18 +107,40 @@ res := timeframe.from_seconds(math.min(tfC, rs))
 
 vSize = tV.size()
 
-//Highest volume when price movement (neutral volume not included)
+//Volume-profile POC (LTF mode): LTF bars are grouped into price buckets,
+//POC = bucket with the most total volume,
+//POC side = up-bar volume vs down-bar volume inside that bucket.
 //pocSide:  1 = bullish POC, -1 = bearish POC, 0 = neutral/tie
-float maxV    = na, float bVmax = na , float sVmax = na 
+//pocStr :  share of the candle's volume sitting in the POC bucket (LTF mode only)
+float maxV    = na
+float pocStr  = na
 int   pocSide = 0
 
-if isLTF
-    bVmax      := bV.max()
-    sVmax      := sV.max()
-    indices     = (bVmax > sVmax ? bV : sV).sort_indices(order.descending)
-    maxV       := indices.size() > 0 ? aCl.get(indices.first()) : na
-    pocSide    := bVmax > sVmax ? 1 : bVmax < sVmax ? -1 : 0
-else 
+if isLTF and vSize > 0
+    binSz = binTks * syminfo.mintick
+    keys  = array.new_float()
+    tot   = array.new_float()
+    upv   = array.new_float()
+    dnv   = array.new_float()
+    for i = 0 to vSize - 1
+        px = aCl.get(i)
+        if na(px)
+            continue
+        k = math.floor(px / binSz)
+        j = keys.indexof(k)
+        if j < 0
+            keys.push(k), tot.push(0.0), upv.push(0.0), dnv.push(0.0)
+            j := keys.size() - 1
+        tot.set(j, tot.get(j) + nz(tV.get(i)))
+        upv.set(j, upv.get(j) + nz(bV.get(i)))
+        dnv.set(j, dnv.get(j) + nz(sV.get(i)))
+    if keys.size() > 0
+        mi      = tot.indexof(tot.max())
+        maxV   := math.round_to_mintick((keys.get(mi) + 0.5) * binSz)
+        pocSide:= upv.get(mi) > dnv.get(mi) ? 1 : upv.get(mi) < dnv.get(mi) ? -1 : 0
+        allV    = tV.sum()
+        pocStr := allV > 0 ? tot.get(mi) / allV : na
+else if isTick
     if maxBl.v != 0 or maxBr.v != 0
         maxV   := maxBl.v > maxBr.v ? maxBl.p : maxBr.p
         pocSide:= maxBl.v > maxBr.v ? 1 : maxBl.v < maxBr.v ? -1 : 0
@@ -171,6 +194,7 @@ plot      (dot ? maxV       : na   , color = pocCol , style=plot.style_circles  
 plot      (bullV                   ,                                                        display =               display.data_window)
 plot      (bearV                   ,                                                        display =               display.data_window)
 plot      (pocSide , 'POC Side (1 bull / -1 bear)',                                         display =               display.data_window)
+plot      (pocStr * 100 , 'POC Strength %',                                                 display =               display.data_window)
 
 //-----------------------------------------------------------------------------}      
 //Details
@@ -178,7 +202,7 @@ plot      (pocSide , 'POC Side (1 bull / -1 bear)',                             
 volu = str.tostring(vol        , format.volume )
 delt = str.tostring(delta      , format.volume )
 perc = str.tostring(norm  * 100, format.percent)
-pocT = pocSide == 1 ? 'Bullish' : pocSide == -1 ? 'Bearish' : 'Neutral'
+pocT = (pocSide == 1 ? 'Bullish' : pocSide == -1 ? 'Bearish' : 'Neutral') + (na(pocStr) ? '' : ' (' + str.tostring(pocStr * 100, '#.#') + '%)')
 
 if isAllowed and showD
     label.new(
