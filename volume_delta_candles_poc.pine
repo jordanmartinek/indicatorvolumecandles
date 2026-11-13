@@ -26,6 +26,8 @@ pocUp  = input.color    (#00e676   , 'Bullish POC' , inline='p', group='POC')
 pocDn  = input.color    (#ff1744   , 'Bearish POC' , inline='p', group='POC', tooltip='POC side = whether the highest-volume intrabar move was bullish (up) or bearish (down).\nNeutral/tie uses the text color below.')
 pocNt  = input.color    (#b2b5be   , 'Neutral POC' , group='POC')
 binTks = input.int      (   4      , 'POC bin size (ticks)', minval=1, group='POC', tooltip='LTF mode only. Price bucket width used to build the intrabar volume profile.\nNQ: 4 ticks = 1 point.\nPOC = bucket with the most volume. POC side = up vs down volume inside that bucket.')
+showStr= input.bool     (   true   , 'Show POC strength % on chart', group='POC')
+strSz  = input.string   (size.small, 'Strength label size'           , group='POC', options=[size.tiny, size.small, size.normal, size.large])
 showTab= input.bool     (   true   ,   'Show TF'              , group=     'Table'    )
 tabCol = input.color  (#b2b5beaa , 'Text Color'             , group=     'Table'    )     
 sizeT  = input.string   (size.tiny , 'Size Table'             , group=     'Table'
@@ -215,6 +217,14 @@ if isAllowed and showD
      "Volume: {0}\nDelta: {1}\n%: {2}\nPOC: {3}"
      , volu , delt, perc, pocT)
      )
+
+if showStr and not na(maxV) and not na(pocStr)
+    label.new(n, maxV
+     , text=str.tostring(pocStr * 100, '#') + '%'
+     , style=label.style_label_left
+     , color=INV
+     , textcolor=pocCol
+     , size=strSz)
 
 //-----------------------------------------------------------------------------}      
 //Table
